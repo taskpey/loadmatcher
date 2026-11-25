@@ -19,9 +19,9 @@ details summary{cursor:pointer;font-weight:700;color:#4c1d95;font-size:13px}.hin
 </style></head><body>
 <header><h1>Load Matcher</h1><p>Load dalo, sabse nazdeek sahi truck wale carriers foran sort ho kar aayenge. Ek click se Gmail ya WhatsApp.</p></header>
 <details class="panel" id="impBox" open><summary>Carriers import (CSV)</summary>
-<p class="hint">Pehli line header ho: <b>Company, MC, Equipment, Email, City, State, Phone, Officer</b> (Company, Email aur City/State zaroori; baqi optional). Excel se Save as CSV karo ya seedha copy karke neeche paste karo.</p>
+<p class="hint">Pehli line header ho: <b>Company, MC, Equipment, Email, City, State, Phone, Officer</b> (Company, Email aur City/State zaroori; baqi optional). Excel se Save as CSV karo ya seedha copy karke neeche paste karo. Header ke baghair bhi chalega: har line mein Company, Email aur City, ST ho (equipment na ho to wo har load ke liye dikhega).</p>
 <textarea id="imp" placeholder="Company,MC,Equipment,Email,City,State,Phone,Officer"></textarea>
-<div class="row"><button class="primary" id="impBtn">Import karo</button><label class="btn" style="margin:0">CSV file chuno<input type="file" id="impFile" accept=".csv,.txt,.tsv" style="display:none"></label><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="keep" style="width:auto;margin:0"> Purana data bhi rakho</label><button id="sample">Sample CSV</button><button id="delAll" style="color:#b91c1c">Sab carriers hatao</button></div>
+<div class="row"><button class="primary" id="impBtn">Import karo</button><label class="btn" style="margin:0">CSV file chuno<input type="file" id="impFile" accept=".csv,.txt,.tsv" style="display:none"></label><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="keep" style="width:auto;margin:0"> Purana data bhi rakho</label><button id="sample">Sample CSV</button><button id="delAll" style="color:#b91c1c">Sab carriers hatao</button><button id="bk">Backup</button><label class="btn" style="margin:0">Restore<input type="file" id="rsF" accept=".json" style="display:none"></label></div>
 <p class="hint" id="impOut"></p></details>
 <div class="panel"><div class="grid">
 <div><label>Pickup city (City, ST)<input id="pu" list="cl" placeholder="Newark, NJ" autocomplete="off"></label></div>
@@ -33,8 +33,8 @@ details summary{cursor:pointer;font-weight:700;color:#4c1d95;font-size:13px}.hin
 <div><label>Rate ($)<input id="rt" type="number" placeholder="1200"></label></div>
 <div><label>Pickup date<input id="dt" placeholder="Tomorrow 8 AM"></label></div>
 </div><datalist id="cl"></datalist>
-<div class="row"><button class="primary" id="go">Carriers dhoondo</button><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="hs" style="width:auto;margin:0"> Sent wale chhupao</label><button id="top10">Top 10 Gmail tabs kholo</button><button id="rs" style="color:#b91c1c">Sent reset</button></div>
-<p class="hint">Deadhead = seedhi doori x 1.2 (road ka andaza). Exact miles ke liye card ka Maps button dabao.</p></div>
+<div class="row"><button class="primary" id="go">Carriers dhoondo</button><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="hs" style="width:auto;margin:0"> Sent wale chhupao</label><button id="top10">Top 10 Gmail tabs kholo</button><button id="ex">Exact road miles (top 10)</button><button id="post">Load post copy</button><button id="rs" style="color:#b91c1c">Sent reset</button></div>
+<p class="hint">Deadhead = seedhi doori x 1.2 (road ka andaza). Exact road miles button se top 10 carriers ke asli miles aa jate hain.</p></div>
 <details class="panel"><summary>Email template badlo</summary>
 <label>Subject<input id="ts"></label><label>Body<textarea id="tb"></textarea></label>
 <p class="hint">Placeholders: {first} {company} {equipment} {base} {pickup} {delivery} {deadhead} {miles} {weight} {rate} {date}. Jis line ka value khali ho wo line email se hat jati hai.</p>
@@ -62,7 +62,15 @@ try{for(const r of need){$('impOut').textContent='Carriers ke shehar dhoondh rah
 catch(e){$('impOut').textContent='Internet/geocode masla: '+e.message+'. Page dobara kholo to baqi shehar dhoondhega.'}gBusy=false;if(L)show()}
 function splitLine(l){if(l.includes('\t'))return l.split('\t').map(x=>x.trim());const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'&&l[i+1]==='"'){c+='"';i++}else if(ch==='"')q=false;else c+=ch}else if(ch==='"')q=true;else if(ch===','){o.push(c.trim());c=''}else c+=ch}o.push(c.trim());return o}
 function normEq(x){x=(x||'').toLowerCase();if(/box|straight/.test(x))return 'Box Truck';if(/power/.test(x))return 'Power Only';if(/hot|multi/.test(x))return 'Multi Trucks';if(/big|flat|step|lowboy|heavy|equip/.test(x))return 'Big Equipment';return 'Unknown'}
-function parse(t){const lines=t.split(/\r?\n/).filter(l=>l.trim());if(lines.length<2)return {err:'Header line aur kam az kam 1 carrier chahiye.'};
+function smart(l){const em=(l.match(/[^\s,;<>\t]+@[^\s,;<>\t]+/)||[''])[0];if(!em)return null;const i=l.indexOf(em),pre=l.slice(0,i).split(/\t+/).map(x=>x.trim()).filter(Boolean);let rest=l.slice(i+em.length).replace(/^[\s,;\t]+/,''),mc='',co='';
+for(const x of pre){if(/^\d{4,8}$/.test(x)&&!mc)mc=x;else if(!co)co=x}if(!co)return null;
+const pm=rest.match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);if(pm)rest=rest.replace(pm[0],' ');
+let a=rest.split(/[,\t]+/).map(x=>x.trim()).filter(Boolean);const ec=a.find(x=>/^(box|straight|power|hot ?shot|multi|flat ?bed|step ?deck|lowboy|big equip|sprinter|cargo)/i.test(x));a=a.filter(x=>x!==ec);let city='',stt='';
+if(a.length>=2){city=a[0];const t=a[1].split(/\s+/);stt=t[0].length===2?t[0].toUpperCase():a[1]}else{const m=rest.match(/^(.*?)\s+([A-Z]{2})\b/);if(m){city=m[1].trim();stt=m[2]}}
+if(!city||!stt)return null;return {mc:mc||em.replace(/['"\\]/g,''),co,em,eq:ec?normEq(ec):'Unknown',city,stt,ph:pm?pm[0]:'',of:''}}
+function parse(t){const lines=t.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return {err:'Pehle kuch paste karo.'};
+if(!/@/.test(lines[0])&&!/compan|carrier|e-?mail|city|legal/i.test(lines[0])||/@/.test(lines[0])){const rows=[];let bad=0;for(const l of lines){const r=smart(l);r?rows.push(r):bad++}return rows.length?{rows,bad}:{err:'Koi carrier samajh nahi aaya. Har line mein Company, Email aur City, ST hona chahiye.'}}
+if(lines.length<2)return {err:'Header line aur kam az kam 1 carrier chahiye.'};
 const h=splitLine(lines[0]).map(x=>x.toLowerCase()),F={of:/officer|contact|owner|person|dispatcher/,co:/compan|carrier|legal|dba|business|^name/,mc:/\bmc\b|docket/,em:/e-?mail/,ph:/phone|tel|mobile|cell/,eq:/equip|truck|type/,city:/^city|town/,st:/^st(ate)?$|province/,loc:/location|base/},ix={};
 for(const k in F)ix[k]=h.findIndex(x=>F[k].test(x));
 if(ix.co<0||ix.em<0||(ix.city<0&&ix.loc<0))return {err:'Header mein Company, Email aur City (ya Location) column chahiye. Sample CSV dekho.'};
@@ -82,14 +90,14 @@ const gmail=(r,dh)=>{const m=msg(r,dh);return 'https://mail.google.com/mail/u/0/
 const wa=(r,dh)=>{let d=(ph[r.mc]||r.ph||'').replace(/\D/g,'');if(d.length===10)d='1'+d;return d.length<11?'':'https://wa.me/'+d+'?text='+encodeURIComponent(msg(r,dh).b)};
 function mark(mc){sent[mc]=Date.now();sv('lmSentV1',sent);setTimeout(show,300)}
 function show(){const hide=$('hs').checked,a=res.filter(x=>!(hide&&sent[x.r.mc])),miss=DATA.filter(r=>!coord(r)).length;
-$('status').textContent=L?(res.length+' carriers mile ('+L.pu.n+' se '+L.mx+' mi ke andar'+(L.eq==='Any'?'':', '+L.eq)+')'+(miss?' · '+miss+' carriers ka shehar abhi nahi mila':'')):'';
-$('list').innerHTML=a.map(({r,dh},i)=>{const w=wa(r,dh),b=r.city+', '+r.stt;return '<section class="card '+(sent[r.mc]?'sent':'')+'"><div class="top"><div><div class="co">'+(i+1)+'. '+esc(r.co)+'</div><div class="meta">MC #'+esc(r.mc)+' · <span class="tag">'+esc(r.eq)+'</span><br>Base: '+esc(b)+'<br>'+esc(r.em)+((ph[r.mc]||r.ph)?'<br>Phone: '+esc(ph[r.mc]||r.ph):'')+(sent[r.mc]?'<br><b>Sent: '+new Date(sent[r.mc]).toLocaleString()+'</b>':'')+'</div></div><div class="dh">'+dh+' mi<small>deadhead (est.)</small></div></div><div class="row"><a class="btn primary" target="_blank" href="'+gmail(r,dh)+'" onclick="mark(\''+r.mc+'\')">Gmail</a>'+(w?'<a class="btn wa" target="_blank" href="'+w+'" onclick="mark(\''+r.mc+'\')">WhatsApp</a>':'<button onclick="addPh(\''+r.mc+'\')">Phone add</button>')+'<button onclick="cp(\''+r.mc+'\','+dh+')">Copy</button><a class="btn" target="_blank" href="https://www.google.com/maps/dir/'+encodeURIComponent(b)+'/'+encodeURIComponent(L.pu.n)+'">Maps</a><button onclick="sent[\''+r.mc+'\']?delete sent[\''+r.mc+'\']:sent[\''+r.mc+'\']=Date.now();sv(\'lmSentV1\',sent);show()">'+(sent[r.mc]?'Unmark':'Mark sent')+'</button></div></section>'}).join('')}
+$('status').textContent=L?(res.length+' carriers mile ('+L.pu.n+' se '+L.mx+' mi ke andar'+(L.eq==='Any'?'':', '+L.eq)+')'+(L.rt&&+L.mi?' · $'+(L.rt/L.mi).toFixed(2)+'/mi':'')+(miss?' · '+miss+' carriers ka shehar abhi nahi mila':'')):'';
+$('list').innerHTML=a.map(({r,dh,ex},i)=>{const w=wa(r,dh),b=r.city+', '+r.stt;return '<section class="card '+(sent[r.mc]?'sent':'')+'"><div class="top"><div><div class="co">'+(i+1)+'. '+esc(r.co)+'</div><div class="meta">MC #'+esc(r.mc)+' · <span class="tag">'+esc(r.eq)+'</span><br>Base: '+esc(b)+'<br>'+esc(r.em)+((ph[r.mc]||r.ph)?'<br>Phone: '+esc(ph[r.mc]||r.ph):'')+(sent[r.mc]?'<br><b>Sent: '+new Date(sent[r.mc]).toLocaleString()+'</b>':'')+'</div></div><div class="dh">'+dh+' mi<small>'+(ex?'road miles ✔':'deadhead est.')+'</small></div></div><div class="row"><a class="btn primary" target="_blank" href="'+gmail(r,dh)+'" onclick="mark(\''+r.mc+'\')">Gmail</a>'+(w?'<a class="btn wa" target="_blank" href="'+w+'" onclick="mark(\''+r.mc+'\')">WhatsApp</a>':'<button onclick="addPh(\''+r.mc+'\')">Phone add</button>')+'<button onclick="cp(\''+r.mc+'\','+dh+')">Copy</button><a class="btn" target="_blank" href="https://www.google.com/maps/dir/'+encodeURIComponent(b)+'/'+encodeURIComponent(L.pu.n)+'">Maps</a><button onclick="sent[\''+r.mc+'\']?delete sent[\''+r.mc+'\']:sent[\''+r.mc+'\']=Date.now();sv(\'lmSentV1\',sent);show()">'+(sent[r.mc]?'Unmark':'Mark sent')+'</button></div></section>'}).join('')}
 function addPh(mc){const p=prompt('Carrier ka phone number (US, 10 digits):');if(p){ph[mc]=p;sv('lmPhoneV1',ph);show()}}
 function cp(mc,dh){const r=DATA.find(x=>x.mc===mc),m=msg(r,dh);navigator.clipboard.writeText('Subject: '+m.s+'\n\n'+m.b).then(()=>alert('Copied'))}
 $('go').onclick=async()=>{const pu=$('pu').value,de=$('de').value.trim();if(!DATA.length){alert('Pehle carriers import karo.');return}if(!pu.trim()||!de){alert('Pickup aur delivery city dalo.');return}
 $('status').textContent='Pickup city dhoondh raha hoon…';
 try{const p=await locate(pu);L={pu:p,de,eq:$('eq').value,mx:+$('mx').value||100,mi:$('mi').value,wt:$('wt').value,rt:$('rt').value,dt:$('dt').value.trim()};
-res=DATA.filter(r=>L.eq==='Any'||r.eq===L.eq).map(r=>({r,c:coord(r)})).filter(x=>x.c).map(x=>({r:x.r,dh:Math.round(hav(p.la,p.lo,x.c[0],x.c[1])*1.2)})).filter(x=>x.dh<=L.mx).sort((a,b)=>a.dh-b.dh);
+res=DATA.filter(r=>L.eq==='Any'||r.eq===L.eq||r.eq==='Unknown').map(r=>({r,c:coord(r)})).filter(x=>x.c).map(x=>({r:x.r,dh:Math.round(hav(p.la,p.lo,x.c[0],x.c[1])*1.2)})).filter(x=>x.dh<=L.mx).sort((a,b)=>a.dh-b.dh);
 if(!res.length){$('list').innerHTML='';$('status').textContent='Is area mein koi carrier nahi mila. Max deadhead badhao ya equipment Any karo.'}else show()}
 catch(e){$('status').textContent='Error: '+e.message}};
 $('hs').onchange=()=>L&&show();
@@ -101,5 +109,16 @@ $('impBtn').onclick=()=>doImport($('imp').value);
 $('impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>doImport(rd.result);rd.readAsText(f);e.target.value=''};
 $('delAll').onclick=()=>{if(confirm('Sab carriers hata dun? ('+DATA.length+')')){DATA=[];sv('lmCarriersV1',DATA);res=[];$('list').innerHTML='';$('impOut').textContent='Sab carriers hat gaye.';info()}};
 $('sample').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['Company,MC,Equipment,Email,City,State,Phone,Officer\nSample Trucking LLC,123456,Box Truck,sample@gmail.com,Newark,NJ,5551234567,John Smith\nDemo Hauling INC,654321,Hotshot,demo@gmail.com,Dallas,TX,,\n'],{type:'text/csv'}));a.download='carriers_sample.csv';a.click()};
+const OH=['https://router.project-osrm.org','https://routing.openstreetmap.de/routed-car'];
+async function road(p,list){const co=[p].concat(list).map(c=>c[1]+','+c[0]).join(';'),d=list.map((_,i)=>i+1).join(';');
+const one=async(h,i)=>{if(i)await sleep(1500);const ct=new AbortController(),t=setTimeout(()=>ct.abort(),7000);try{const r=await fetch(h+'/table/v1/driving/'+co+'?sources=0&destinations='+d+'&annotations=distance',{signal:ct.signal}),j=await r.json();if(j.code==='Ok'&&j.distances&&j.distances[0])return j.distances[0].map(m=>m==null?null:Math.round(m/1609.344));throw new Error(j.code||'err')}finally{clearTimeout(t)}};
+return Promise.any(OH.map(one))}
+$('ex').onclick=async()=>{if(!L||!res.length){alert('Pehle carriers dhoondo.');return}const a=res.slice(0,10);$('status').textContent='Road miles check ho rahe hain…';
+try{const m=await road([L.pu.la,L.pu.lo],a.map(x=>coord(x.r)));a.forEach((x,i)=>{if(m[i]!=null){x.dh=m[i];x.ex=1}});res.sort((x,y)=>x.dh-y.dh);show()}
+catch(e){show();$('status').textContent='Road server jawab nahi de raha, estimate hi rakha hai. Thori der baad dobara try karo.'}};
+$('post').onclick=()=>{if(!L){alert('Pehle carriers dhoondo.');return}const v={pu:L.pu.n,de:L.de,eq:L.eq==='Any'?'':(eqW[L.eq]||L.eq),mi:L.mi,wt:L.wt?(+L.wt).toLocaleString():'',rt:L.rt?'$'+(+L.rt).toLocaleString():'',dt:L.dt};
+const t=fill('LOAD AVAILABLE\n{pu} to {de}\nEquipment: {eq}\nPickup date: {dt}\nMiles: {mi} mi\nWeight: {wt} lbs\nRate: {rt}\n\nInterested? Message me here with your MC and truck location.',v);navigator.clipboard.writeText(t).then(()=>alert('Post copy ho gayi, group mein paste karo.'))};
+$('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({DATA,sent,ph,geo,T})],{type:'application/json'}));a.download='loadmatcher_backup.json';a.click()};
+$('rsF').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const b=JSON.parse(rd.result);if(!Array.isArray(b.DATA))throw 0;DATA=b.DATA;sent=b.sent||{};ph=b.ph||{};geo=b.geo||{};T=b.T||T;sv('lmCarriersV1',DATA);sv('lmSentV1',sent);sv('lmPhoneV1',ph);sv('lmGeoV1',geo);sv('lmTplV1',T);$('ts').value=T.s;$('tb').value=T.b;res=[];$('list').innerHTML='';$('impOut').textContent='Backup restore ho gaya: '+DATA.length+' carriers.';info()}catch(x){alert('Ye backup file theek nahi hai.')}};rd.readAsText(f);e.target.value=''};
 info();geoAll();
 </script></body></html>
